@@ -11,10 +11,15 @@ import {
   Edit,
   Trash2,
   Eye,
-  X
+  LogOut,
+  Home,
+  GraduationCap
 } from 'lucide-react';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
+import StudentModal from './StudentModal';
+import CourseModal from './CourseModal';
+import StaffModal from './StaffModal';
 
 const AdminDashboard = () => {
   const { user, logout } = useAuth();
@@ -26,7 +31,7 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
-  const [currentItem, setCurrentItem] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -34,68 +39,102 @@ const AdminDashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (activeTab === 'students') loadStudents();
-    else if (activeTab === 'courses') loadCourses();
-    else if (activeTab === 'staff') loadStaff();
+    if (activeTab === 'students') {
+      loadStudents();
+    } else if (activeTab === 'courses') {
+      loadCourses();
+    } else if (activeTab === 'staff') {
+      loadStaff();
+    }
   }, [activeTab]);
 
   const loadDashboardStats = async () => {
     try {
       const response = await api.get('/dashboard/stats');
-      if (response.data.success) setStats(response.data.data);
+      if (response.data.success) {
+        setStats(response.data.data);
+      }
     } catch (error) {
       console.error('Error loading stats:', error);
     }
   };
 
-  const loadData = async (endpoint, setter) => {
+  const loadStudents = async () => {
     try {
       setLoading(true);
-      const response = await api.get(endpoint);
-      if (response.data.success) setter(response.data.data);
+      const response = await api.get('/students');
+      if (response.data.success) {
+        setStudents(response.data.data);
+      }
     } catch (error) {
-      console.error(`Error loading ${endpoint}:`, error);
+      console.error('Error loading students:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadStudents = () => loadData('/students', setStudents);
-  const loadCourses = () => loadData('/courses', setCourses);
-  const loadStaff = () => loadData('/staff', setStaff);
-
-  const handleOpenModal = (type, item = null) => {
-    setModalType(type);
-    setCurrentItem(item);
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setShowModal(false);
-    setCurrentItem(null);
-    setModalType('');
-  };
-
-  const handleDelete = async (type, id) => {
-    if (window.confirm('Are you sure you want to delete this item?')) {
-      try {
-        await api.delete(`/${type}/${id}`);
-        toast.success('Item deleted successfully');
-        if (type === 'students') loadStudents();
-        else if (type === 'courses') loadCourses();
-        else if (type === 'staff') loadStaff();
-      } catch (error) {
-        console.error(`Error deleting item:`, error);
+  const loadCourses = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/courses');
+      if (response.data.success) {
+        setCourses(response.data.data);
       }
+    } catch (error) {
+      console.error('Error loading courses:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const StatCard = ({ title, value, icon: Icon, color }) => (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+  const loadStaff = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/staff');
+      if (response.data.success) {
+        setStaff(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error loading staff:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (type, id) => {
+    if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
+
+    try {
+      const endpoint = type === 'student' ? '/students' : type === 'course' ? '/courses' : '/staff';
+      const response = await api.delete(`${endpoint}/${id}`);
+      
+      if (response.data.success) {
+        toast.success(`${type} deleted successfully`);
+        
+        if (type === 'student') {
+          loadStudents();
+        } else if (type === 'course') {
+          loadCourses();
+        } else if (type === 'staff') {
+          loadStaff();
+        }
+        
+        loadDashboardStats();
+      }
+    } catch (error) {
+      console.error(`Error deleting ${type}:`, error);
+    }
+  };
+
+  const StatCard = ({ title, value, icon: Icon, color, description }) => (
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex-1">
           <p className="text-gray-600 text-sm font-medium">{title}</p>
           <p className="text-3xl font-bold text-gray-900 mt-1">{value || 0}</p>
+          {description && (
+            <p className="text-xs text-gray-500 mt-1">{description}</p>
+          )}
         </div>
         <div className={`p-3 rounded-lg ${color}`}>
           <Icon className="w-6 h-6 text-white" />
@@ -104,284 +143,804 @@ const AdminDashboard = () => {
     </div>
   );
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard': return <DashboardContent />;
-      case 'students': return <StudentsContent />;
-      case 'courses': return <CoursesContent />;
-      case 'staff': return <StaffContent />;
-      default: return null;
-    }
-  };
-
-  const DashboardContent = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome back, {user?.fullName}!</h2>
-        <p className="text-gray-600">Here's an overview of your system</p>
+  const Sidebar = () => (
+    <div className="bg-slate-800 text-white w-64 min-h-screen p-4 relative">
+      <div className="flex items-center gap-3 mb-8">
+        <GraduationCap className="w-8 h-8" />
+        <div>
+          <h1 className="text-xl font-bold">PKR Portal</h1>
+          <p className="text-xs text-slate-300">Admin Panel</p>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Students" value={stats.totalStudents} icon={Users} color="bg-gradient-to-r from-blue-500 to-blue-600" />
-        <StatCard title="Total Courses" value={stats.totalCourses} icon={BookOpen} color="bg-gradient-to-r from-green-500 to-green-600" />
-        <StatCard title="Total Staff" value={stats.totalStaff} icon={UserCheck} color="bg-gradient-to-r from-purple-500 to-purple-600" />
-        <StatCard title="Attainments" value={stats.totalAttainments} icon={BarChart3} color="bg-gradient-to-r from-orange-500 to-orange-600" />
+
+      <nav className="space-y-2">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            activeTab === 'dashboard' ? 'bg-slate-700' : 'hover:bg-slate-700'
+          }`}
+        >
+          <Home className="w-5 h-5" />
+          Dashboard
+        </button>
+
+        <button
+          onClick={() => setActiveTab('students')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            activeTab === 'students' ? 'bg-slate-700' : 'hover:bg-slate-700'
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          Students
+          {stats.totalStudents > 0 && (
+            <span className="ml-auto bg-blue-600 text-xs px-2 py-1 rounded-full">
+              {stats.totalStudents}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('courses')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            activeTab === 'courses' ? 'bg-slate-700' : 'hover:bg-slate-700'
+          }`}
+        >
+          <BookOpen className="w-5 h-5" />
+          Courses
+          {stats.totalCourses > 0 && (
+            <span className="ml-auto bg-green-600 text-xs px-2 py-1 rounded-full">
+              {stats.totalCourses}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('staff')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            activeTab === 'staff' ? 'bg-slate-700' : 'hover:bg-slate-700'
+          }`}
+        >
+          <UserCheck className="w-5 h-5" />
+          Staff Management
+          {stats.totalStaff > 0 && (
+            <span className="ml-auto bg-purple-600 text-xs px-2 py-1 rounded-full">
+              {stats.totalStaff}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('attainment')}
+          className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+            activeTab === 'attainment' ? 'bg-slate-700' : 'hover:bg-slate-700'
+          }`}
+        >
+          <BarChart3 className="w-5 h-5" />
+          Attainment
+          {stats.totalAttainments > 0 && (
+            <span className="ml-auto bg-orange-600 text-xs px-2 py-1 rounded-full">
+              {stats.totalAttainments}
+            </span>
+          )}
+        </button>
+      </nav>
+
+      <div className="absolute bottom-4 left-4 right-4">
+        <div className="bg-slate-700 p-3 rounded-lg mb-4">
+          <p className="text-xs text-slate-300">Logged in as</p>
+          <p className="text-sm font-medium">{user?.fullName}</p>
+          <p className="text-xs text-slate-400">{user?.email}</p>
+        </div>
+        <button
+          onClick={logout}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-700 transition-colors"
+        >
+          <LogOut className="w-5 h-5" />
+          Logout
+        </button>
       </div>
     </div>
   );
 
-  const TableActions = ({ onEdit, onDelete }) => (
-    <div className="flex items-center justify-end gap-2">
-      <button onClick={onEdit} className="text-blue-600 hover:text-blue-800 p-1"><Edit className="w-4 h-4" /></button>
-      <button onClick={onDelete} className="text-red-600 hover:text-red-800 p-1"><Trash2 className="w-4 h-4" /></button>
+  const Header = () => (
+    <div className="bg-white border-b border-gray-200 p-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {activeTab === 'dashboard' && 'Admin Dashboard'}
+            {activeTab === 'students' && 'Student Management'}
+            {activeTab === 'courses' && 'Course Management'}
+            {activeTab === 'staff' && 'Staff Management'}
+            {activeTab === 'attainment' && 'Attainment Management'}
+          </h2>
+          <p className="text-sm text-gray-600 mt-1">
+            {activeTab === 'dashboard' && 'Overview of system statistics and quick actions'}
+            {activeTab === 'students' && 'Manage student information and records'}
+            {activeTab === 'courses' && 'Manage course information and curriculum'}
+            {activeTab === 'staff' && 'Manage staff accounts and permissions'}
+            {activeTab === 'attainment' && 'Manage course outcome attainment data'}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <p className="text-sm font-medium text-gray-900">{user?.fullName}</p>
+            <p className="text-xs text-gray-500">{user?.role}</p>
+          </div>
+          <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold">
+            {user?.fullName?.charAt(0)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const DashboardContent = () => (
+    <div className="space-y-6">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Total Students"
+          value={stats.totalStudents}
+          icon={Users}
+          color="bg-gradient-to-r from-blue-500 to-blue-600"
+          description="Active student records"
+        />
+        <StatCard
+          title="Total Courses"
+          value={stats.totalCourses}
+          icon={BookOpen}
+          color="bg-gradient-to-r from-green-500 to-green-600"
+          description="Available courses"
+        />
+        <StatCard
+          title="Total Staff"
+          value={stats.totalStaff}
+          icon={UserCheck}
+          color="bg-gradient-to-r from-purple-500 to-purple-600"
+          description="Staff members"
+        />
+        <StatCard
+          title="Marks Entries"
+          value={stats.totalMarks}
+          icon={BarChart3}
+          color="bg-gradient-to-r from-orange-500 to-orange-600"
+          description="Student marks recorded"
+        />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <button
+            onClick={() => {
+              setModalType('student');
+              setSelectedItem(null);
+              setShowModal(true);
+            }}
+            className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200"
+          >
+            <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <h4 className="font-medium text-gray-900 mb-1">Add New Student</h4>
+            <p className="text-sm text-gray-600">Create a new student record</p>
+          </button>
+          
+          <button
+            onClick={() => {
+              setModalType('course');
+              setSelectedItem(null);
+              setShowModal(true);
+            }}
+            className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-all duration-200"
+          >
+            <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <h4 className="font-medium text-gray-900 mb-1">Add New Course</h4>
+            <p className="text-sm text-gray-600">Create a new course</p>
+          </button>
+          
+          <button
+            onClick={() => {
+              setModalType('staff');
+              setSelectedItem(null);
+              setShowModal(true);
+            }}
+            className="p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all duration-200"
+          >
+            <UserCheck className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+            <h4 className="font-medium text-gray-900 mb-1">Add New Staff</h4>
+            <p className="text-sm text-gray-600">Create a staff account</p>
+          </button>
+        </div>
+      </div>
+
+      {/* System Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">System Overview</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Database Status</span>
+              <span className="text-green-600 font-medium">● Connected</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Last Backup</span>
+              <span className="text-gray-900">Today, 2:00 AM</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600">Active Sessions</span>
+              <span className="text-gray-900">1</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+              <div>
+                <p className="text-sm text-gray-900">Admin logged in</p>
+                <p className="text-xs text-gray-500">Just now</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+              <div>
+                <p className="text-sm text-gray-900">System started</p>
+                <p className="text-xs text-gray-500">2 minutes ago</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 
   const StudentsContent = () => (
     <div className="space-y-6">
+      {/* Header with Add Button and Search */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-2xl font-bold text-gray-900">Student Management</h2>
-        <button onClick={() => handleOpenModal('student')} className="btn btn-primary flex items-center gap-2"><Plus className="w-4 h-4" />Add Student</button>
-      </div>
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="th">Student</th>
-                <th className="th">Course</th>
-                <th className="th">Department</th>
-                <th className="th text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {students.map((student) => (
-                <tr key={student._id} className="hover:bg-gray-50">
-                  <td className="td">
-                    <div className="font-medium text-gray-900">{student.name}</div>
-                    <div className="text-sm text-gray-500">{student.rollNumber}</div>
-                  </td>
-                  <td className="td">{student.course}</td>
-                  <td className="td">{student.department}</td>
-                  <td className="td text-right">
-                    <TableActions onEdit={() => handleOpenModal('student', student)} onDelete={() => handleDelete('students', student._id)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="flex items-center gap-4 flex-1">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search students..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input pl-10 pr-4"
+            />
+          </div>
+          <button className="btn btn-secondary flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            Filter
+          </button>
         </div>
+        <button
+          onClick={() => {
+            setModalType('student');
+            setSelectedItem(null);
+            setShowModal(true);
+          }}
+          className="btn btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Student
+        </button>
+      </div>
+
+      {/* Students Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Student
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Course & Department
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Semester
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    CGPA
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {students
+                  .filter(student => 
+                    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    student.rollNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    student.email.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((student) => (
+                  <tr key={student._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold mr-4">
+                          {student.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{student.name}</div>
+                          <div className="text-sm text-gray-500">{student.rollNumber}</div>
+                          <div className="text-xs text-gray-400">{student.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{student.course}</div>
+                      <div className="text-sm text-gray-500">{student.department}</div>
+                      <div className="text-xs text-gray-400">Batch: {student.batch}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        Semester {student.semester}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
+                        student.cgpa >= 8 ? 'bg-green-100 text-green-800' :
+                        student.cgpa >= 6 ? 'bg-yellow-100 text-yellow-800' :
+                        student.cgpa >= 4 ? 'bg-orange-100 text-orange-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {student.cgpa.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="text-gray-600 hover:text-gray-900 p-1 rounded"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setModalType('student');
+                            setSelectedItem(student);
+                            setShowModal(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                          title="Edit Student"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete('student', student._id)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded"
+                          title="Delete Student"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {students.length === 0 && (
+              <div className="text-center py-16">
+                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Students Found</h3>
+                <p className="text-gray-600 mb-4">Get started by adding your first student.</p>
+                <button
+                  onClick={() => {
+                    setModalType('student');
+                    setSelectedItem(null);
+                    setShowModal(true);
+                  }}
+                  className="btn btn-primary"
+                >
+                  Add Student
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 
   const CoursesContent = () => (
     <div className="space-y-6">
-        <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-900">Course Management</h2>
-            <button onClick={() => handleOpenModal('course')} className="btn btn-primary flex items-center gap-2"><Plus className="w-4 h-4" />Add Course</button>
+      {/* Header with Add Button and Search */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4 flex-1">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search courses..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input pl-10 pr-4"
+            />
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                            <th className="th">Course Name</th>
-                            <th className="th">Course Code</th>
-                            <th className="th">Department</th>
-                            <th className="th text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {courses.map((course) => (
-                            <tr key={course._id} className="hover:bg-gray-50">
-                                <td className="td font-medium">{course.name}</td>
-                                <td className="td">{course.code}</td>
-                                <td className="td">{course.department}</td>
-                                <td className="td text-right">
-                                    <TableActions onEdit={() => handleOpenModal('course', course)} onDelete={() => handleDelete('courses', course._id)} />
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+        <button
+          onClick={() => {
+            setModalType('course');
+            setSelectedItem(null);
+            setShowModal(true);
+          }}
+          className="btn btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Course
+        </button>
+      </div>
+
+      {/* Courses Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Course
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Department
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Semester
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Credits
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Academic Year
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {courses
+                  .filter(course => 
+                    course.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    course.courseCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    course.department.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((course) => (
+                  <tr key={course._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{course.courseName}</div>
+                        <div className="text-sm text-gray-500">{course.courseCode}</div>
+                        {course.instructor && (
+                          <div className="text-xs text-gray-400">Instructor: {course.instructor}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {course.department}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        Semester {course.semester}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {course.credits} Credits
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {course.academicYear}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="text-gray-600 hover:text-gray-900 p-1 rounded"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setModalType('course');
+                            setSelectedItem(course);
+                            setShowModal(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                          title="Edit Course"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete('course', course._id)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded"
+                          title="Delete Course"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {courses.length === 0 && (
+              <div className="text-center py-16">
+                <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Courses Found</h3>
+                <p className="text-gray-600 mb-4">Get started by adding your first course.</p>
+                <button
+                  onClick={() => {
+                    setModalType('course');
+                    setSelectedItem(null);
+                    setShowModal(true);
+                  }}
+                  className="btn btn-primary"
+                >
+                  Add Course
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
   const StaffContent = () => (
     <div className="space-y-6">
-        <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-900">Staff Management</h2>
-            <button onClick={() => handleOpenModal('staff')} className="btn btn-primary flex items-center gap-2"><Plus className="w-4 h-4" />Add Staff</button>
+      {/* Header with Add Button and Search */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-4 flex-1">
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search staff..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="form-input pl-10 pr-4"
+            />
+          </div>
         </div>
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                            <th className="th">Name</th>
-                            <th className="th">Email</th>
-                            <th className="th">Role</th>
-                            <th className="th text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {staff.map((staffMember) => (
-                            <tr key={staffMember._id} className="hover:bg-gray-50">
-                                <td className="td font-medium">{staffMember.fullName}</td>
-                                <td className="td">{staffMember.email}</td>
-                                <td className="td">{staffMember.role}</td>
-                                <td className="td text-right">
-                                    <TableActions onEdit={() => handleOpenModal('staff', staffMember)} onDelete={() => handleDelete('staff', staffMember._id)} />
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-md z-20">
-        <div className="flex items-center justify-center h-20 border-b">
-          <h1 className="text-2xl font-bold text-gray-800">Admin Panel</h1>
-        </div>
-        <nav className="mt-6">
-          <NavItem icon={BarChart3} text="Dashboard" name="dashboard" />
-          <NavItem icon={Users} text="Students" name="students" />
-          <NavItem icon={BookOpen} text="Courses" name="courses" />
-          <NavItem icon={UserCheck} text="Staff" name="staff" />
-        </nav>
-        <div className="absolute bottom-0 w-full p-4">
-          <button onClick={logout} className="w-full btn btn-secondary">Logout</button>
-        </div>
+        <button
+          onClick={() => {
+            setModalType('staff');
+            setSelectedItem(null);
+            setShowModal(true);
+          }}
+          className="btn btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Staff
+        </button>
       </div>
 
-      {/* Main Content */}
-      <main className="ml-64 p-8">
-        {renderContent()}
-      </main>
-
-      {showModal && <FormModal type={modalType} item={currentItem} onClose={handleCloseModal} />}
+      {/* Staff Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {loading ? (
+          <div className="flex justify-center items-center py-16">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Staff Member
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Email
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Department
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created At
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {staff
+                  .filter(member => 
+                    member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    member.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    member.email.toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .map((member) => (
+                  <tr key={member._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold mr-4">
+                          {member.fullName.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{member.fullName}</div>
+                          <div className="text-sm text-gray-500">@{member.username}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{member.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {member.department || 'Not specified'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(member.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          className="text-gray-600 hover:text-gray-900 p-1 rounded"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setModalType('staff');
+                            setSelectedItem(member);
+                            setShowModal(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                          title="Edit Staff"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete('staff', member._id)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded"
+                          title="Delete Staff"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            
+            {staff.length === 0 && (
+              <div className="text-center py-16">
+                <UserCheck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Staff Found</h3>
+                <p className="text-gray-600 mb-4">Get started by adding your first staff member.</p>
+                <button
+                  onClick={() => {
+                    setModalType('staff');
+                    setSelectedItem(null);
+                    setShowModal(true);
+                  }}
+                  className="btn btn-primary"
+                >
+                  Add Staff
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 
-  function NavItem({ icon: Icon, text, name }) {
-    const isActive = activeTab === name;
-    return (
-      <a
-        href="#"
-        onClick={(e) => {
-          e.preventDefault();
-          setActiveTab(name);
-        }}
-        className={`flex items-center px-6 py-3 text-gray-600 hover:bg-gray-100 transition-colors ${isActive ? 'bg-gray-100 text-blue-600' : ''}`}
-      >
-        <Icon className="w-5 h-5" />
-        <span className="ml-4 font-medium">{text}</span>
-      </a>
-    );
-  }
-};
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <DashboardContent />;
+      case 'students':
+        return <StudentsContent />;
+      case 'courses':
+        return <CoursesContent />;
+      case 'staff':
+        return <StaffContent />;
+      default:
+        return <DashboardContent />;
+    }
+  };
 
-const FormModal = ({ type, item, onClose }) => {
-    const [formData, setFormData] = useState({});
+  const handleModalClose = () => {
+    setShowModal(false);
+    setSelectedItem(null);
+    setModalType('');
+  };
 
-    useEffect(() => {
-        setFormData(item || {});
-    }, [item]);
+  const handleModalSuccess = () => {
+    handleModalClose();
+    
+    // Refresh data based on modal type
+    if (modalType === 'student') {
+      loadStudents();
+    } else if (modalType === 'course') {
+      loadCourses();
+    } else if (modalType === 'staff') {
+      loadStaff();
+    }
+    
+    loadDashboardStats();
+  };
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-    };
+  return (
+    <div className="flex h-screen bg-gray-100">
+      <Sidebar />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        
+        <main className="flex-1 overflow-y-auto p-6">
+          {renderContent()}
+        </main>
+      </div>
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const endpoint = `/${type}s${item ? `/${item._id}` : ''}`;
-        const method = item ? 'put' : 'post';
-        try {
-            await api[method](endpoint, formData);
-            toast.success(`'${type}' saved successfully`);
-            onClose();
-            // NOTE: We need a way to trigger a reload of the data in the parent
-        } catch (error) {
-            console.error(`Error saving ${type}`, error);
-        }
-    };
-
-    const renderFormFields = () => {
-        switch (type) {
-            case 'student':
-                return (
-                    <>
-                        <InputField name="name" label="Student Name" value={formData.name} onChange={handleInputChange} />
-                        <InputField name="rollNumber" label="Roll Number" value={formData.rollNumber} onChange={handleInputChange} />
-                        <InputField name="course" label="Course" value={formData.course} onChange={handleInputChange} />
-                        <InputField name="department" label="Department" value={formData.department} onChange={handleInputChange} />
-                    </>
-                );
-            case 'course':
-                return (
-                    <>
-                        <InputField name="name" label="Course Name" value={formData.name} onChange={handleInputChange} />
-                        <InputField name="code" label="Course Code" value={formData.code} onChange={handleInputChange} />
-                        <InputField name="department" label="Department" value={formData.department} onChange={handleInputChange} />
-                    </>
-                );
-            case 'staff':
-                return (
-                    <>
-                        <InputField name="fullName" label="Full Name" value={formData.fullName} onChange={handleInputChange} />
-                        <InputField name="email" label="Email" type="email" value={formData.email} onChange={handleInputChange} />
-                        <InputField name="role" label="Role" value={formData.role} onChange={handleInputChange} />
-                        <InputField name="password" label="Password" type="password" placeholder="Leave blank to keep unchanged" onChange={handleInputChange} />
-                    </>
-                );
-            default:
-                return null;
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-30 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-                <div className="flex justify-between items-center p-6 border-b">
-                    <h3 className="text-xl font-bold">{item ? 'Edit' : 'Add'} {type}</h3>
-                    <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100"><X className="w-5 h-5" /></button>
-                </div>
-                <form onSubmit={handleSubmit}>
-                    <div className="p-6 space-y-4">
-                        {renderFormFields()}
-                    </div>
-                    <div className="p-6 bg-gray-50 flex justify-end gap-4 rounded-b-xl">
-                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancel</button>
-                        <button type="submit" className="btn btn-primary">Save</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const InputField = ({ name, label, value, onChange, type = 'text', placeholder = '' }) => (
-    <div>
-        <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-        <input
-            type={type}
-            id={name}
-            name={name}
-            value={value || ''}
-            onChange={onChange}
-            placeholder={placeholder}
-            className="form-input"
+      {/* Modals */}
+      {showModal && modalType === 'student' && (
+        <StudentModal
+          isOpen={showModal}
+          onClose={handleModalClose}
+          student={selectedItem}
+          onSuccess={handleModalSuccess}
         />
+      )}
+
+      {showModal && modalType === 'course' && (
+        <CourseModal
+          isOpen={showModal}
+          onClose={handleModalClose}
+          course={selectedItem}
+          onSuccess={handleModalSuccess}
+        />
+      )}
+
+      {showModal && modalType === 'staff' && (
+        <StaffModal
+          isOpen={showModal}
+          onClose={handleModalClose}
+          staff={selectedItem}
+          onSuccess={handleModalSuccess}
+        />
+      )}
     </div>
-);
+  );
+};
 
 export default AdminDashboard;

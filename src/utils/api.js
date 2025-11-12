@@ -17,7 +17,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    return config;
+        return config;
   },
   (error) => {
     return Promise.reject(error);
@@ -34,9 +34,13 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';
+      toast.error('Session expired. Please login again.');
+    } else if (error.response?.status === 403) {
+      toast.error('Access denied');
+    } else if (error.response?.status === 500) {
+      toast.error('Server error. Please try again later.');
     }
     
-    toast.error(message);
     return Promise.reject(error);
   }
 );

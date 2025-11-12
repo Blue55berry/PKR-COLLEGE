@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Eye, EyeOff, User, Lock } from 'lucide-react';
+import { Eye, EyeOff, User, Lock, GraduationCap } from 'lucide-react';
 
 const Login = () => {
   const [formData, setFormData] = useState({
@@ -68,6 +68,11 @@ const Login = () => {
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Header */}
           <div className="text-center mb-8">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
+                <GraduationCap className="w-8 h-8 text-white" />
+              </div>
+            </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">PKR Portal</h1>
             <p className="text-gray-600">Arts Student Evaluation Center</p>
           </div>
@@ -139,13 +144,16 @@ const Login = () => {
           </form>
 
           {/* Footer */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Default credentials:
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              admin/admin123 or staff/staff123
-            </p>
+          <div className="mt-8 text-center">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-700 font-medium mb-2">
+                Demo Credentials:
+              </p>
+              <div className="text-xs text-gray-600 space-y-1">
+                <p><strong>Admin:</strong> admin / admin123</p>
+                <p><strong>Staff:</strong> staff / staff123</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
