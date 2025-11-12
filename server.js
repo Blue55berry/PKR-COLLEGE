@@ -3,16 +3,42 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const app = express();
 
 // Middleware
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://localhost:3000',
+].filter(Boolean); // Removes falsy values if FRONTEND_URL is not set
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+      return callback(new Error(msg), false);
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
+
+// Create uploads directory if it doesn't exist
+const uploadsDir = 'uploads';
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/pkr_portal', {
@@ -60,6 +86,26 @@ const courseSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Student Marks Schema
+const studentMarksSchema = new mongoose.Schema({
+  studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', required: true },
+  rollNumber: { type: String, required: true },
+  name: { type: String, required: true },
+  courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course' },
+  marks: {
+    test1: { type: Number, default: 0 },
+    test2: { type: Number, default: 0 },
+    assignment1: { type: Number, default: 0 },
+    assignment2: { type: Number, default: 0 },
+    semesterExam: { type: Number, default: 0 },
+    totalMarks: { type: Number, default: 0 },
+    grade: { type: String, default: 'F' }
+  },
+  uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+});
+
 // Attainment Schema
 const attainmentSchema = new mongoose.Schema({
   courseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true },
@@ -80,7 +126,35 @@ const attainmentSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const Student = mongoose.model('Student', studentSchema);
 const Course = mongoose.model('Course', courseSchema);
+const StudentMarks = mongoose.model('StudentMarks', studentMarksSchema);
 const Attainment = mongoose.model('Attainment', attainmentSchema);
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /xlsx|xls|csv/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    
+    if (extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Only Excel files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Middleware to verify JWT
 const verifyToken = (req, res, next) => {
@@ -156,6 +230,7 @@ app.get('/api/dashboard/stats', verifyToken, async (req, res) => {
     const totalCourses = await Course.countDocuments();
     const totalStaff = await User.countDocuments({ role: 'staff' });
     const totalAttainments = await Attainment.countDocuments();
+    const totalMarks = await StudentMarks.countDocuments();
     
     res.json({
       success: true,
@@ -163,7 +238,8 @@ app.get('/api/dashboard/stats', verifyToken, async (req, res) => {
         totalStudents,
         totalCourses,
         totalStaff,
-        totalAttainments
+        totalAttainments,
+        totalMarks
       }
     });
   } catch (error) {
@@ -175,7 +251,7 @@ app.get('/api/dashboard/stats', verifyToken, async (req, res) => {
 app.get('/api/students', verifyToken, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
     
     const students = await Student.find()
@@ -341,6 +417,252 @@ app.post('/api/staff', verifyToken, async (req, res) => {
   }
 });
 
+// Excel Upload and Parse Route
+app.post('/api/excel/upload', verifyToken, upload.single('excelFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+    // Clean up the uploaded file
+    fs.unlinkSync(req.file.path);
+
+    // Map Excel columns to our schema
+    const mappedData = jsonData.map(row => ({
+      rollNumber: row['Roll Number'] || row['rollNumber'] || row['RollNumber'] || '',
+      name: row['Name'] || row['Student Name'] || row['name'] || '',
+      email: row['Email'] || row['email'] || `${row['Roll Number'] || 'student'}@pkr.edu`,
+      course: row['Course'] || row['course'] || 'Not specified',
+      batch: row['Batch'] || row['batch'] || new Date().getFullYear() + '-' + (new Date().getFullYear() + 4),
+      department: row['Department'] || row['department'] || 'General',
+      semester: parseInt(row['Semester'] || row['semester']) || 1,
+      cgpa: parseFloat(row['CGPA'] || row['cgpa']) || 0,
+      phoneNumber: row['Phone'] || row['phoneNumber'] || '',
+      address: row['Address'] || row['address'] || ''
+    }));
+
+    res.json({
+      success: true,
+      data: mappedData,
+      message: 'Excel file parsed successfully'
+    });
+  } catch (error) {
+    console.error('Excel upload error:', error);
+    res.status(500).json({ success: false, message: 'Failed to parse Excel file' });
+  }
+});
+
+// Save Excel Data to Database
+app.post('/api/excel/save-to-database', verifyToken, async (req, res) => {
+  try {
+    const { students } = req.body;
+
+    const savedStudents = [];
+    const errors = [];
+
+    for (let studentData of students) {
+      try {
+        // Check if student exists
+        const existingStudent = await Student.findOne({ 
+          rollNumber: studentData.rollNumber 
+        });
+
+        if (!existingStudent) {
+          // Create new student
+          const newStudent = new Student({
+            rollNumber: studentData.rollNumber,
+            name: studentData.name,
+            email: studentData.email,
+            course: studentData.course,
+            batch: studentData.batch,
+            department: studentData.department,
+            semester: studentData.semester,
+            cgpa: studentData.cgpa || 0,
+            phoneNumber: studentData.phoneNumber || '',
+            address: studentData.address || ''
+          });
+
+          await newStudent.save();
+          savedStudents.push(newStudent);
+        } else {
+          // Update existing student
+          existingStudent.name = studentData.name;
+          existingStudent.email = studentData.email;
+          existingStudent.course = studentData.course;
+          existingStudent.batch = studentData.batch;
+          existingStudent.department = studentData.department;
+          existingStudent.semester = studentData.semester;
+          existingStudent.cgpa = studentData.cgpa || 0;
+          existingStudent.phoneNumber = studentData.phoneNumber || '';
+          existingStudent.address = studentData.address || '';
+          existingStudent.updatedAt = new Date();
+
+          await existingStudent.save();
+          savedStudents.push(existingStudent);
+        }
+      } catch (error) {
+        errors.push({
+          rollNumber: studentData.rollNumber,
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        savedCount: savedStudents.length,
+        errorCount: errors.length,
+        savedStudents,
+        errors
+      },
+      message: `Successfully processed ${savedStudents.length} students`
+    });
+  } catch (error) {
+    console.error('Save to database error:', error);
+    res.status(500).json({ success: false, message: 'Failed to save to database' });
+  }
+});
+
+// Save Student Marks
+app.post('/api/student-marks', verifyToken, async (req, res) => {
+  try {
+    const { studentId, rollNumber, name, marks, courseId } = req.body;
+
+    // Check if marks already exist for this student
+    const existingMarks = await StudentMarks.findOne({ 
+      studentId: studentId,
+      rollNumber: rollNumber 
+    });
+
+    // Calculate total marks and grade
+    const totalMarks = Object.values(marks).reduce((sum, mark) => sum + (parseFloat(mark) || 0), 0);
+    const percentage = (totalMarks / 500) * 100; // Assuming total is 500
+    
+    let grade = 'F';
+    if (percentage >= 90) grade = 'A+';
+    else if (percentage >= 80) grade = 'A';
+    else if (percentage >= 70) grade = 'B+';
+    else if (percentage >= 60) grade = 'B';
+    else if (percentage >= 50) grade = 'C';
+    else if (percentage >= 40) grade = 'D';
+
+    const marksData = {
+      studentId,
+      rollNumber,
+      name,
+      courseId,
+      marks: {
+        ...marks,
+        totalMarks,
+        grade
+      },
+      uploadedBy: req.user.userId,
+      updatedAt: new Date()
+    };
+
+    let studentMarks;
+    if (existingMarks) {
+      studentMarks = await StudentMarks.findByIdAndUpdate(
+        existingMarks._id,
+        marksData,
+        { new: true }
+      );
+    } else {
+      studentMarks = new StudentMarks(marksData);
+      await studentMarks.save();
+    }
+
+    res.json({
+      success: true,
+      data: studentMarks,
+      message: 'Marks saved successfully'
+    });
+  } catch (error) {
+    console.error('Save marks error:', error);
+    res.status(500).json({ success: false, message: 'Failed to save marks' });
+  }
+});
+
+// Get Student Marks
+app.get('/api/student-marks', verifyToken, async (req, res) => {
+  try {
+    const marks = await StudentMarks.find()
+      .populate('studentId', 'rollNumber name')
+      .populate('courseId', 'courseCode courseName')
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: marks
+    });
+  } catch (error) {
+    console.error('Get marks error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch marks' });
+  }
+});
+
+// Export Marks to Excel
+app.get('/api/excel/export-marks', verifyToken, async (req, res) => {
+  try {
+    const marks = await StudentMarks.find()
+      .populate('studentId', 'rollNumber name course department')
+      .populate('courseId', 'courseCode courseName');
+
+    const exportData = marks.map(mark => ({
+      'Roll Number': mark.rollNumber,
+      'Student Name': mark.name,
+      'Course': mark.studentId?.course || 'N/A',
+      'Department': mark.studentId?.department || 'N/A',
+      'Test 1 (100)': mark.marks.test1,
+      'Test 2 (100)': mark.marks.test2,
+      'Assignment 1 (100)': mark.marks.assignment1,
+      'Assignment 2 (100)': mark.marks.assignment2,
+      'Semester Exam (100)': mark.marks.semesterExam,
+      'Total Marks (500)': mark.marks.totalMarks,
+      'Percentage': ((mark.marks.totalMarks / 500) * 100).toFixed(2) + '%',
+      'Grade': mark.marks.grade,
+      'Created Date': mark.createdAt.toISOString().split('T')[0],
+      'Updated Date': mark.updatedAt.toISOString().split('T')[0]
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    
+    // Set column widths
+    const maxWidth = 20;
+    const cols = Object.keys(exportData[0] || {}).map(() => ({ wch: maxWidth }));
+    worksheet['!cols'] = cols;
+    
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Marks');
+
+    const fileName = `student-marks-${Date.now()}.xlsx`;
+    const filePath = path.join('uploads', fileName);
+
+    XLSX.writeFile(workbook, filePath);
+
+    res.download(filePath, `student-marks-${new Date().toISOString().split('T')[0]}.xlsx`, (err) => {
+      if (err) {
+        console.error('Download error:', err);
+      }
+      // Clean up the file after download
+      setTimeout(() => {
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      }, 30000); // Delete after 30 seconds
+    });
+  } catch (error) {
+    console.error('Export error:', error);
+    res.status(500).json({ success: false, message: 'Failed to export marks' });
+  }
+});
+
 // Attainment Routes
 app.get('/api/attainments', verifyToken, async (req, res) => {
   try {
@@ -406,6 +728,16 @@ const initializeDefaultUsers = async () => {
     console.error('Error initializing users:', error);
   }
 };
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, message: 'File too large' });
+    }
+  }
+  res.status(500).json({ success: false, message: error.message });
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
