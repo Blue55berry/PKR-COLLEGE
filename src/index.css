@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .dropdown-menu {
+    @apply absolute hidden pt-1 group-hover:block bg-white shadow-lg rounded-md z-10 min-w-[200px];
+  }
+  
+  .nav-link {
+    @apply hover:text-gray-300 px-3 py-2;
+  }
+  
+  .nav-dropdown {
+    @apply relative;
+  }
+}
