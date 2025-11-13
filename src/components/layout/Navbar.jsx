@@ -13,15 +13,49 @@ const Navbar = () => {
       path: "/about", 
       dropdown: [
         { name: "History", path: "/about/history" },
-        { name: "Vision & Mission", path: "/about/vision" },
-        { name: "Management", path: "/about/management" }
+        { name: "Vision & Mission", path: "/about/vision-mission" },
+        { name: "Management", path: "/about/management" },
+        { name: "Principal's Desk", path: "/about/principals-desk" }
       ]
     },
-    { name: "Admissions", path: "/admissions", dropdown: [] },
-    { name: "Departments", path: "/departments", dropdown: [] },
-    { name: "Research", path: "/research", dropdown: [] },
+    { 
+      name: "Admissions", 
+      path: "/admissions", 
+      dropdown: [
+        { name: "How to Apply", path: "/admissions/how-to-apply" },
+        { name: "Eligibility", path: "/admissions/eligibility" },
+        { name: "Fee Structure", path: "/admissions/fee-structure" },
+        { name: "Scholarships", path: "/admissions/scholarships" }
+      ] 
+    },
+    { 
+      name: "Departments", 
+      path: "/departments", 
+      dropdown: [
+        { name: "Arts", path: "/departments/arts" },
+        { name: "Commerce", path: "/departments/commerce" },
+        { name: "Science", path: "/departments/science" }
+      ] 
+    },
+    { 
+      name: "Research", 
+      path: "/research", 
+      dropdown: [
+        { name: "Research Cell", path: "/research/cell" },
+        { name: "Research Projects", path: "/research/projects" },
+        { name: "Research Advisory", path: "/research/advisory" }
+      ] 
+    },
     { name: "Campus Life", path: "/campus-life" },
-    { name: "Resources", path: "/resources", dropdown: [] },
+    { 
+      name: "Resources", 
+      path: "/resources", 
+      dropdown: [
+        { name: "Library", path: "/resources/library" },
+        { name: "E-Resources", path: "/resources/e-resources" },
+        { name: "Laboratory", path: "/resources/laboratory" }
+      ] 
+    },
     { name: "Alumni", path: "/alumni" },
     { name: "Gallery", path: "/gallery" },
     { name: "IQAC", path: "/iqac" },
